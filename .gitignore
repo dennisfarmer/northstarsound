@@ -1,6 +1,7 @@
-svm_models/
+bin/audio/svm_models/
 essentia/
 .vscode/
+.DS_Store
 __pycache__/
 
 data/
@@ -10,9 +11,14 @@ notes/
 
 .env
 .venv
+.e_env/
 .cache
 kaggle.json
 yt-dlp
+*.part
+*.ytdl
+output.txt
+msd-musicnn-1.pb
 
 *.pyc
 *.pyo

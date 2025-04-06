@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import kagglehub
 import os
 import ast
 import pandas as pd
 
 def download_data() -> None:
+    import kagglehub
     datadir = os.path.join(os.path.dirname(__file__), "data/features")
 
     path = kagglehub.dataset_download("fcpercival/160k-spotify-songs-sorted", path='data.csv')

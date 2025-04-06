@@ -14,17 +14,47 @@ import signal
 #from threading import Thread
 
 keyboard_interrupt = False
-def signal_handler(signal, frame):
-    global keyboard_interrupt
-    keyboard_interrupt = True
+#def signal_handler(signal, frame):
+    #global keyboard_interrupt
+    #keyboard_interrupt = True
 
-signal.signal(signal.SIGINT, signal_handler)
+#signal.signal(signal.SIGINT, signal_handler)
 
 env = dotenv_values(".env")
 verbose = env["VERBOSE"] == "True"
 
 completed_user_ids_csv = env["COMPLETED_USER_IDS_CSV"]
 playlist_db = env["PLAYLIST_DB"]
+
+
+def process_playlist(tracks, playlist_id) -> dict:
+    if verbose: print(f"\tprocessing playlist {playlist_id}...")
+    tracks_json = {}
+    for track in tracks:
+        try:
+            track_id = track['track']['id']
+        except TypeError as e:
+            if verbose: print(f"\t\tTrack has been removed from Spotify, skipping...")
+            continue
+        track_name = track['track']['name']
+        track_artists = [{'name': artist['name'], 'id': artist['id']} for artist in track['track']['artists']]
+        track_album = track['track']['album']['name']
+        track_album_id = track['track']['album']['id']
+        tracks_json[track_id] = {
+            'name': track_name,
+            'album': track_album,
+            'album_id': track_album_id,
+            'artist': track_artists[0]['name'],
+            'popularity': track['track']['popularity']
+        }
+    return tracks_json
+
+
+def get_playlist_tracks(spp, playlist_id):
+    tracks = spp.playlist_tracks(playlist_id)
+    return process_playlist(tracks['items'], playlist_id)
+
+
 
 class SpotifyPlaylistProcessor:
     def __init__(self, client_id, client_secret, db_name=playlist_db):
@@ -82,24 +112,24 @@ class SpotifyPlaylistProcessor:
 
         self.commit(force=True)
 
-    def _retry_on_429(self, func, *args, **kwargs):
-        while True:
-            try:
-                return func(*args, **kwargs)
-            except spotipy.exceptions.SpotifyException as e:
-                # this code is redundant
-                if e.http_status == 429:
-                    if verbose: print("WARNING:root:Your application has reached a rate/request limit. Retry will occur after:", e.headers['Retry-After'])
-                    time.sleep(int(e.headers['Retry-After']) + 1)
-                    try:
-                        return func(*args, **kwargs)
-                    except spotipy.exceptions.SpotifyException as e:
-                        raise e
-                else:
-                    raise e
-            except requests.exceptions.ReadTimeout as e:
-                if verbose: print("ReadTimeout: Check internet connection or Spotify API status. Also, computer might be locked.")
-                raise e
+    #def _retry_on_429(self, func, *args, **kwargs):
+        #while True:
+            #try:
+                #return func(*args, **kwargs)
+            #except spotipy.exceptions.SpotifyException as e:
+                ## this code is redundant
+                #if e.http_status == 429:
+                    #if verbose: print("WARNING:root:Your application has reached a rate/request limit. Retry will occur after:", e.headers['Retry-After'])
+                    #time.sleep(int(e.headers['Retry-After']) + 1)
+                    #try:
+                        #return func(*args, **kwargs)
+                    #except spotipy.exceptions.SpotifyException as e:
+                        #raise e
+                #else:
+                    #raise e
+            #except requests.exceptions.ReadTimeout as e:
+                #if verbose: print("ReadTimeout: Check internet connection or Spotify API status. Also, computer might be locked.")
+                #raise e
     
     def refresh_completed_user_ids(self):
         if not os.path.exists(completed_user_ids_csv):
@@ -109,27 +139,8 @@ class SpotifyPlaylistProcessor:
             self.completed_user_ids = f.read().splitlines()
     
 
-    def process_playlist(self, tracks, playlist_id) -> None:
-        if verbose: print(f"\tprocessing playlist {playlist_id}...")
-        tracks_json = {}
-        for track in tracks:
-            try:
-                track_id = track['track']['id']
-            except TypeError as e:
-                if verbose: print(f"\t\tTrack has been removed from Spotify, skipping...")
-                continue
-            track_name = track['track']['name']
-            track_artists = [{'name': artist['name'], 'id': artist['id']} for artist in track['track']['artists']]
-            track_album = track['track']['album']['name']
-            track_album_id = track['track']['album']['id']
-            tracks_json[track_id] = {
-                'name': track_name,
-                'album': track_album,
-                'album_id': track_album_id,
-                'artist': track_artists[0]['name'],
-                'popularity': track['track']['popularity']
-            }
 
+    def write_playlist_to_db(self, playlist_id, tracks_json):
         for track_id, track in tracks_json.items():
             self.cursor.execute('''
             INSERT OR IGNORE INTO tracks (id, name, album_id, artist, popularity)
@@ -153,15 +164,18 @@ class SpotifyPlaylistProcessor:
             if verbose: print(f"user {user_id} already processed, skipping...")
             return
         if verbose: print(f"processing user {user_id}...")
-        playlists = self._retry_on_429(self.sp.user_playlists, user_id)
+        playlists = self.sp.user_playlists(user_id)
         playlist_json = {}
         for playlist in playlists['items']:
             playlist_id = playlist['id']
-            tracks = self._retry_on_429(self.sp.playlist_tracks, playlist_id)
+            #tracks = self._retry_on_429(self.sp.playlist_tracks, playlist_id)
+            tracks = self.sp.playlist_tracks(playlist_id)
             playlist_json[playlist_id] = [playlist, tracks['items']]
         if verbose: print(f"found {len(playlist_json)} playlists:")
         for playlist_id, (playlist, tracks) in playlist_json.items():
-            self.process_playlist(tracks, playlist_id)
+            tracks_json = process_playlist(tracks, playlist_id)
+            self.write_playlist_to_db(playlist_id, tracks_json)
+
             self.cursor.execute('''
             INSERT OR IGNORE INTO playlists (id, name, description, owner_id, owner_name, total_tracks)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -183,6 +197,7 @@ class SpotifyPlaylistProcessor:
                 self.commit_counter = 0
 
     def close(self):
+        #self.cursor.execute('''delete from tracks where artist is null;''')
         self.commit(force=True)
         self.cursor.close()
         self.conn.close()
@@ -190,7 +205,7 @@ class SpotifyPlaylistProcessor:
 def convert_idx_args(start_idx: int, end_idx: int|None, max_idx: int) -> tuple[int, int]:
     if start_idx is None:
         start_idx = 0
-    if end_idx is None:
+    if end_idx is None or end_idx == 0:
         end_idx = start_idx + 1
     elif end_idx == -1:
         end_idx = max_idx
