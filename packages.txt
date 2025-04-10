@@ -1,4 +1,4 @@
-sqlite
+sqlite3
 build-essential
 libyaml-dev
 libfftw3-dev
