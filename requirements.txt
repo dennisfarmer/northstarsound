@@ -1,14 +1,14 @@
 essentia-tensorflow
 dotenv
 matplotlib
-numpy==1.26.4
+numpy<2
 pandas
-plotly==6.0.1
+plotly
 python-dotenv
 requests
 scikit-learn
 scipy
-spotipy==2.25.1
+spotipy
 streamlit
 tqdm
 urllib3
