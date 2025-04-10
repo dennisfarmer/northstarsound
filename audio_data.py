@@ -9,7 +9,7 @@ import signal
 import argparse
 import urllib3
 from tqdm import tqdm
-from playlist_data import convert_idx_args
+
 
 from dotenv import dotenv_values
 from urllib.parse import quote
@@ -19,11 +19,71 @@ audio_storage = env["AUDIO_STORAGE"]
 verbose = env["VERBOSE"] == "True"
 
 keyboard_interrupt = False
-def signal_handler(signal, frame):
-    global keyboard_interrupt
-    keyboard_interrupt = True
+#def signal_handler(signal, frame):
+    #global keyboard_interrupt
+    #keyboard_interrupt = True
 
-signal.signal(signal.SIGINT, signal_handler)
+#signal.signal(signal.SIGINT, signal_handler)
+def hash_video_id(video_id: str) -> str:
+    hash_value = sum(ord(char) for char in video_id) % 100 + 1
+    return f"{hash_value:03}"
+
+def get_video_id(track_name: str, artist_name: str, search_blacklist: list = None) -> str:
+    search_query = f"{track_name} by {artist_name} official audio".replace("+", "%2B").replace(" ", "+").replace('"', "%22")
+    search_query = quote(search_query, safe="+")
+
+    search_url = "https://www.youtube.com/results?search_query=" + search_query
+
+    if search_blacklist is not None and search_url in search_blacklist:
+        print(f"Audio skipped: blacklist contains {search_url}")
+        return None
+
+    request = requests.get(search_url)
+    if request.status_code != 200:
+        if verbose: print(request.status_code)
+        if verbose: print(request.headers)
+        raise Exception("HTTP request failed: " + request.reason)
+    html_content = request.text
+
+    match = re.search(r'"videoId":"(.*?)"', html_content)
+    if match:
+        video_id = match.group(1)
+        return video_id
+    else:
+        print("todo: implement YouTube Data API call as alternative (rate limited)")
+        print(track_name, artist_name)
+        print(search_url)
+        raise Exception('video ID of the form "videoId":"MI_XU1iKRRc" not found in youtube request response')
+
+def download_audio(video_id: str, storage_base: str = None, download_path = None, hash_id = False) -> str:
+    if download_path is None:
+        download_path = ""
+    if storage_base is None:
+        storage_base = ""
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    if hash_id:
+        subdir = os.path.join(storage_base, hash_video_id(video_id))
+    else:
+        subdir = storage_base
+
+    os.makedirs(subdir, exist_ok=True)
+    output_path = os.path.join(subdir, f"{video_id}.mp3")
+    if os.path.exists(output_path):
+        if verbose: print(f"File already exists: {output_path}")
+        return output_path
+
+    print(url)
+    yt = ['./yt-dlp', '--extract-audio', '--audio-format', 'mp3', '--quiet', '--no-warnings', '--progress', '--output', output_path, url]
+    output = subprocess.run(yt, capture_output=False, text=True)
+    #TODO: handle errors
+    #if "Sign in to confirm your age" in output.stderr:
+        #print("Age verification required. Skipping.")
+        #return None
+    #if "Requested format is not available" in output.stderr:
+        #print("Requested format not available. Skipping.")
+        #return None
+
+    return output_path
 
 class YoutubeAudioDownloader:
     def __init__(self, db_path=playlist_db, storage_base=audio_storage):
@@ -51,58 +111,8 @@ class YoutubeAudioDownloader:
         ''')
         self.commit(force=True)
 
-    def get_video_id(self, track_name: str, artist_name: str) -> str:
-        search_query = f"{track_name} by {artist_name} official audio".replace("+", "%2B").replace(" ", "+").replace('"', "%22")
-        search_query = quote(search_query, safe="+")
 
-        search_url = "https://www.youtube.com/results?search_query=" + search_query
 
-        if search_url in self.search_blacklist:
-            print(f"Audio skipped: blacklist contains {search_url}")
-            return None
-
-        request = requests.get(search_url)
-        if request.status_code != 200:
-            if verbose: print(request.status_code)
-            if verbose: print(request.headers)
-            raise Exception("HTTP request failed: " + request.reason)
-        html_content = request.text
-
-        match = re.search(r'"videoId":"(.*?)"', html_content)
-        if match:
-            video_id = match.group(1)
-            return video_id
-        else:
-            print("todo: implement YouTube Data API call as alternative (rate limited)")
-            print(track_name, artist_name)
-            print(search_url)
-            raise Exception('video ID of the form "videoId":"MI_XU1iKRRc" not found in youtube request response')
-
-    def hash_video_id(self, video_id: str) -> str:
-        hash_value = sum(ord(char) for char in video_id) % 100 + 1
-        return f"{hash_value:03}"
-
-    def download_audio(self, video_id: str) -> str:
-        url = f"https://www.youtube.com/watch?v={video_id}"
-        subdir = os.path.join(self.storage_base, self.hash_video_id(video_id))
-        os.makedirs(subdir, exist_ok=True)
-        output_path = os.path.join(subdir, f"{video_id}.mp3")
-        if os.path.exists(output_path):
-            if verbose: print(f"File already exists: {output_path}")
-            return output_path
-
-        print(url)
-        yt = ['./yt-dlp', '--extract-audio', '--audio-format', 'mp3', '--quiet', '--no-warnings', '--progress', '--output', output_path, url]
-        output = subprocess.run(yt, capture_output=False, text=True)
-        #TODO: handle errors
-        #if "Sign in to confirm your age" in output.stderr:
-            #print("Age verification required. Skipping.")
-            #return None
-        #if "Requested format is not available" in output.stderr:
-            #print("Requested format not available. Skipping.")
-            #return None
-
-        return output_path
 
     def process_track(self, track_id: str, track_name: str = None, artist_name: str = None):
         if track_name is None or artist_name is None:
@@ -117,7 +127,7 @@ class YoutubeAudioDownloader:
         if self.already_processed_counter > 0:
             print(f"Already processed {self.already_processed_counter} audio files.")
             self.already_processed_counter = 0
-        video_id = self.get_video_id(track_name, artist_name)
+        video_id = get_video_id(track_name, artist_name, self.search_blacklist)
         if video_id is None:
             if verbose: print(f"Video ID not found for track_id {track_id}")
             self.cursor.execute('''
@@ -176,6 +186,22 @@ class YoutubeAudioDownloader:
         self.conn.close()
         if verbose: print("Database connection closed.")
 
+def convert_idx_args(start_idx: int, end_idx: int|None, max_idx: int) -> tuple[int, int]:
+    if start_idx is None:
+        start_idx = 0
+    if end_idx is None or end_idx == 0:
+        end_idx = start_idx + 1
+    elif end_idx == -1:
+        end_idx = max_idx
+    elif end_idx > max_idx:
+        raise ValueError("Invalid end_index: end_index must be less than or equal to the number of user IDs.")
+
+    if start_idx < 0 or start_idx >= max_idx:
+        raise ValueError("Invalid start_index: start_index must be non-negative and less than the number of user IDs.")
+
+    if end_idx <= start_idx:
+        raise ValueError("Invalid indices: end_index must be greater than start_index.")
+    return start_idx, end_idx
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Download audio files from YouTube.")

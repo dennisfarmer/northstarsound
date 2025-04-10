@@ -5,12 +5,15 @@ from spotipy.oauth2 import SpotifyClientCredentials
 import sqlite3
 import time
 import requests
+from audio_data import get_video_id, download_audio
+from embedding_data import compute_audio_embedding
 
 from dotenv import dotenv_values
 import os
 import argparse
 from tqdm import tqdm
 import signal
+import re
 #from threading import Thread
 
 keyboard_interrupt = False
@@ -22,10 +25,19 @@ keyboard_interrupt = False
 
 env = dotenv_values(".env")
 verbose = env["VERBOSE"] == "True"
+client_id = env["SPOTIPY_CLIENT_ID"]
+client_secret = env["SPOTIPY_CLIENT_SECRET"]
 
 completed_user_ids_csv = env["COMPLETED_USER_IDS_CSV"]
 playlist_db = env["PLAYLIST_DB"]
 
+def playlist_url_to_id(playlist_url: str) -> str:
+    match = re.search(r'playlist/([a-zA-Z0-9]+)', playlist_url)
+    if match:
+        playlist_id = match.group(1)
+    else:
+        raise ValueError("Invalid playlist URL")
+    return playlist_id
 
 def process_playlist(tracks, playlist_id) -> dict:
     if verbose: print(f"\tprocessing playlist {playlist_id}...")
@@ -49,10 +61,84 @@ def process_playlist(tracks, playlist_id) -> dict:
         }
     return tracks_json
 
+#def write_playlist_to_db(self, tracks_json, cursor):
+    #for track_id, track in tracks_json.items():
+        #cursor.execute('''
+        #INSERT OR IGNORE INTO tracks (id, name, album_id, artist, popularity)
+        #VALUES (?, ?, ?, ?, ?)
+        #''', (track_id, track['name'], track['album_id'], track['artist'], track['popularity']))
 
-def get_playlist_tracks(spp, playlist_id):
-    tracks = spp.playlist_tracks(playlist_id)
-    return process_playlist(tracks['items'], playlist_id)
+        #cursor.execute('''
+        #INSERT OR IGNORE INTO albums (id, name)
+        #VALUES (?, ?)
+        #''', (track['album_id'], track['album']))
+
+        #cursor.execute('''
+        #INSERT OR IGNORE INTO playlist_tracks (playlist_id, track_id)
+        #VALUES (?, ?)
+        #''', (playlist_id, track_id))
+
+        #self.commit()
+
+#def write_track_to_db(track_id, track, conn):
+def write_embedding_to_db(video_id, embedding, conn):
+    placeholders = ", ".join(["?"] * 51)
+    query = f"INSERT OR REPLACE INTO audio_embeddings VALUES ({placeholders})"
+    conn.execute(query, (video_id, *embedding.tolist()))  # Convert numpy array to list
+    conn.commit()
+
+def get_playlist_tracks(playlist_id):
+    spp = SpotifyPlaylistProcessor(client_id, client_secret)
+    conn = sqlite3.connect(playlist_db)
+    cursor = conn.cursor()
+
+    try:
+        if verbose: print("calling spotify API...")
+        tracks = spp.sp.playlist_tracks(playlist_id)
+    except spotipy.exceptions.SpotifyException as e:
+        if e.http_status == 400:
+            print(f"invalid playlist_id: {playlist_id}")
+        raise e
+    tracks_json = process_playlist(tracks['items'], playlist_id)
+    for track_id, track in tracks_json.items():
+        video_id = cursor.execute('''
+        select video_id from audio_files where track_id = ?
+                       ''', (track_id,)).fetchone()
+        if video_id is None:
+            if verbose: print("searching via Youtube...")
+            video_id = get_video_id(track['name'], track['artist'])
+            if verbose: print("downloading audio via yt-dlp...")
+            audio_path = download_audio(video_id, "./data/audio/")
+            embedding = compute_audio_embedding((video_id, audio_path))
+        else:
+            video_id = video_id[0]
+            embedding = cursor.execute('''
+            select * from audio_embeddings where video_id = ?
+                                    ''', (video_id,)).fetchone()
+            if embedding is None:
+                print("downloading audio via yt-dlp...")
+                audio_path = download_audio(video_id, "./data/audio/")
+                embedding = compute_audio_embedding((video_id, audio_path))
+            else:
+                embedding = embedding[1:]
+
+        tracks_json[track_id]['video_id'] = video_id
+        tracks_json[track_id]['embedding'] = embedding
+
+    playlist_tracks = [
+        {
+            "video_id": track['video_id'],
+            "track_id": track_id,
+            "title": track['name'],
+            "artist": track['artist'],
+            "album": track['album'],
+            "album_id": track['album_id'],
+            "popularity": track['popularity'],
+            "embedding": track['embedding']
+        } for track_id, track in tracks_json.items()
+    ]
+    return playlist_tracks
+
 
 
 

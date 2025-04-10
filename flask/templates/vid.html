@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Recommendations</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .playlist {
+            border: 1px solid #762b2b;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .recommendation {
+            border: 1px solid #dedede;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .album-art {
+            max-width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Playlist</h1>
+        <ul>
+                <div style="width:300px;float:left;">
+                    <img src="http://img.youtube.com/vi/saJPHuLQWZw/maxresdefault.jpg" alt="Album Art" class="album-art">
+
+                    <!--
+                    <div style="position:relative;width:300px;height:100px;overflow:hidden;">
+                    -->
+                        <iframe width="300" height="100" src="https://www.youtube.com/embed/saJPHuLQWZw?rel=0"></iframe>
+                    <!--
+                    </div>
+                    -->
+                </div>
+                <div style="width:300px;float:right;">
+                    <li class="playlist">
+                        <h2>Last Oasis</h2>
+                        <p>King Gizzard & The Lizard Wizard, Gumboot Soup</p>
+                    </li>
+                </div>
+        </ul>
+</body>
+</html>
