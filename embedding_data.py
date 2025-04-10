@@ -1,9 +1,7 @@
 import essentia.standard as es
 import numpy as np
-MUSICNN_SR = 16000
-def compute_audio_embedding(id_and_path):
-    video_id = id_and_path[0]
-    audio_path = id_and_path[1]
+def compute_audio_embedding(video_id, audio_path):
+    MUSICNN_SR = 16000
     try:
         audio = es.MonoLoader(filename=audio_path, sampleRate=MUSICNN_SR)()
         musicnn_emb = es.TensorflowPredictMusiCNN(graphFilename='msd-musicnn-1.pb', output='model/dense_1/BiasAdd')(audio)

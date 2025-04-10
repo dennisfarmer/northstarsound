@@ -4,7 +4,6 @@ essentia/
 .DS_Store
 __pycache__/
 
-data/
 bin/
 model/
 notes/
@@ -14,11 +13,9 @@ notes/
 .e_env/
 .cache
 kaggle.json
-yt-dlp
 *.part
 *.ytdl
 output.txt
-msd-musicnn-1.pb
 
 *.pyc
 *.pyo

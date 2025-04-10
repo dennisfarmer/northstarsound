@@ -68,12 +68,12 @@ def content_based_filtering(playlist_tracks, k) -> list[dict]:
         #print(track_id)
         #raise ValueError()
         track_id = cursor.execute("SELECT track_id FROM audio_files WHERE video_id = ?", (video_id,)).fetchone()[0]
-        title, artist, album_id = cursor.execute("SELECT name, artist, album_id FROM tracks WHERE id = ?",
+        name, artist, album_id = cursor.execute("SELECT name, artist, album_id FROM tracks WHERE id = ?",
                              (track_id,)).fetchone()
         album = cursor.execute("SELECT name FROM albums WHERE id = ?", (album_id,)).fetchone()[0]
         closest_tracks.append({
             "track_id": track_id,
-            "title": title,
+            "name": name,
             "artist": artist,
             "album": album,
             "video_id": video_id,
@@ -199,7 +199,7 @@ def collaborative_filtering(playlist_tracks, k):
     return [
         {
             "track_id": "2RYjjYGzW3WK7X32aiSU3e",
-            "title": "The Last Oasis",
+            "name": "The Last Oasis",
             "artist": "King Gizzard & The Lizard Wizard",
             "album": "Gumboot Soup",
             "video_id": "XF_eiMLG9Ho",

@@ -1,4 +1,4 @@
-from playlist_data import SpotifyPlaylistProcessor, get_playlist_tracks, playlist_url_to_id
+from track_data import SpotifyPlaylistProcessor, get_playlist_tracks, playlist_url_to_id
 from recommender import get_music_recommendations
 import sqlite3
 from dotenv import dotenv_values
@@ -84,7 +84,7 @@ def main():
                 for track in playlist_tracks:
                     track_url = f"https://open.spotify.com/track/{track['track_id']}"
                     with st.expander(
-                        label=f"{track['title']} by {track['artist']}",
+                        label=f"{track['name']} by {track['artist']}",
                         icon=":material/play_circle:",):
 
                         st.video(f"https://www.youtube.com/watch?v={track['video_id']}")
@@ -99,7 +99,7 @@ def main():
                 for track in recommendations:
                     track_url = f"https://open.spotify.com/track/{track['track_id']}"
                     with st.expander(
-                        label=f"{track['title']} by {track['artist']}",
+                        label=f"{track['name']} by {track['artist']}",
                         icon=":material/play_circle:",):
 
                         st.video(f"https://www.youtube.com/watch?v={track['video_id']}")
@@ -107,15 +107,8 @@ def main():
                             label=f"Listen on Spotify",
                             url=track_url,
                             icon=":material/volume_up:",type="tertiary")
-                    #icon=":material/volume_up:",) #"🔊"
-                #st.write(f"{track['title']} by {track['artist']} from {track['album']}")
-        #tab1, tab2 = st.tabs(["Kernel PCA Visualization", "alt"])
-        #with tab1:
-            # Use the Streamlit theme.
-            # This is the default. So you can also omit the theme argument.
         st.plotly_chart(fig, theme="streamlit")#, use_container_width=True)
-        #with tab2:
-            # Use the native Plotly theme.
+
         #except Exception as e:
             #st.error(f"An error occurred: {e}")
 main()
