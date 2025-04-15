@@ -17,6 +17,10 @@ kaggle.json
 *.ytdl
 output.txt
 
+
+aws_embeddings/ffmpeg
+data/playlists/playlists_backup_2025_04_10.db
+
 *.pyc
 *.pyo
 *.pyd

@@ -1,7 +1,6 @@
-essentia-tensorflow
 dotenv
 matplotlib
-numpy<2
+numpy
 pandas
 plotly
 python-dotenv

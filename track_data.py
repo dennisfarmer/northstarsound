@@ -4,7 +4,7 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 import sqlite3
 import requests
-from embedding_data import compute_audio_embedding
+from aws_embeddings.handler import compute_audio_embedding
 
 from dotenv import dotenv_values
 import os

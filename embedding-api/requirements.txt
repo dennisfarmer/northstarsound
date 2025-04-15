@@ -1,0 +1,5 @@
+boto3
+#essentia-tensorflow==2.1b6.dev1177
+essentia-tensorflow==2.1b6.dev1110
+pyyaml
+numpy==1.21.6
