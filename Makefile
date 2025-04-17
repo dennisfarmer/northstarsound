@@ -1,4 +1,3 @@
-main:
-	flask run
-debug:
-	flask run --debug
+run:
+	streamlit run streamlit_app.py
+	

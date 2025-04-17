@@ -12,3 +12,5 @@ streamlit
 tqdm
 urllib3
 watchdog
+seleniumbase
+netscape-cookies

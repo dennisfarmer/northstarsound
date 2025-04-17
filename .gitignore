@@ -18,7 +18,7 @@ kaggle.json
 output.txt
 
 
-embedding-api/ffmpeg
+embedding_api/ffmpeg
 data/playlists/playlists_backup_2025_04_10.db
 
 *.pyc

@@ -4,7 +4,6 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 import sqlite3
 import requests
-from aws_embeddings.handler import compute_audio_embedding
 
 from dotenv import dotenv_values
 import os
@@ -41,11 +40,77 @@ completed_user_ids_csv = env["COMPLETED_USER_IDS_CSV"]
 playlist_db = env["PLAYLIST_DB"]
 
 
-def hash_video_id(video_id: str) -> str:
-    hash_value = sum(ord(char) for char in video_id) % 100 + 1
-    return f"{hash_value:03}"
+#from embedding_api.handler import compute_audio_embedding
+def compute_audio_embedding(video_id: str|None, url: str = "http://localhost:8080/2015-03-31/functions/function/invocations") -> list[float]|None:
+    """
+    Note: The compute_audio_embedding function is currently a placeholder because YouTube IP bans my AWS Lambda instance.
+    This prevents me from interacting with YouTube to fetch audio data (or compute embeddings) from within the Lambda environment.
+    """
+    if verbose: print("obtaining track embedding via AWS Lambda...")
+    if video_id is None:
+        return None
+    return None
+    #payload = {"video_id": str(video_id)}
+    #headers = {"Content-Type": "application/json"}
+    
+    #response = requests.post(url, data=payload, headers=headers).json()
+    #if response["statusCode"] == 200:
+        #return response["body"]["embedding"]
+    #else:
+        #raise FileNotFoundError(f"Failed to compute audio embedding: {response.status_code}, {response.text}")
 
-def get_video_id(track_name: str, artist_name: str, search_blacklist: list = None) -> str:
+# curl -XPOST "http://localhost:8080/2015-03-31/functions/function/invocations" -d '{"video_id": "test"}'
+
+def lookup_audio_embedding(video_id: str|None, cursor = None):
+    if video_id is None:
+        return None
+    new_conn = False
+    if cursor is None:
+        conn = sqlite3.connect(playlist_db)
+        cursor = conn.cursor()
+        new_conn = True
+    embedding = cursor.execute('''
+    select * from audio_embeddings where video_id = ?
+                            ''', (video_id,)).fetchone()
+    if new_conn:
+        conn.close()
+    if embedding is None:
+        return None
+    else:
+        return embedding[1:]
+
+def lookup_video_id(track_id: str|None, cursor = None):
+    if track_id is None:
+        return None
+    new_conn = False
+    if cursor is None:
+        conn = sqlite3.connect(playlist_db)
+        cursor = conn.cursor()
+        new_conn = True
+    video_id = cursor.execute('''
+    select video_id from audio_files where track_id = ?
+                    ''', (track_id,)).fetchone()
+    if new_conn:
+        conn.close()
+    if video_id is None:
+        return None
+    else:
+        return video_id[0]
+
+class YoutubeSearchError(requests.exceptions.ConnectionError):
+    """Exception raised when a YouTube search fails to return a valid video ID."""
+    def __init__(self, message="Invalid YouTube search result. No video ID found.", search_query=None):
+        self.message = message
+        self.search_query = search_query
+        super().__init__(self.message)
+
+    def __str__(self):
+        if self.search_query:
+            return f"{self.message} Search query: {self.search_query}"
+        return self.message
+
+def search_yt_for_video_id(track_name: str, artist_name: str, search_blacklist: list = None) -> str:
+    if verbose: print("searching via Youtube...")
     search_query = f"{track_name} by {artist_name} official audio".replace("+", "%2B").replace(" ", "+").replace('"', "%22")
     search_query = quote(search_query, safe="+")
 
@@ -53,13 +118,14 @@ def get_video_id(track_name: str, artist_name: str, search_blacklist: list = Non
 
     if search_blacklist is not None and search_url in search_blacklist:
         print(f"Audio skipped: blacklist contains {search_url}")
-        return None
+        raise YoutubeSearchError(search_query=search_url)
 
     request = requests.get(search_url)
     if request.status_code != 200:
         if verbose: print(request.status_code)
         if verbose: print(request.headers)
-        raise Exception("HTTP request failed: " + request.reason)
+        if verbose: print(request.reason)
+        raise YoutubeSearchError(search_query=search_url)
     html_content = request.text
 
     match = re.search(r'"videoId":"(.*?)"', html_content)
@@ -69,141 +135,26 @@ def get_video_id(track_name: str, artist_name: str, search_blacklist: list = Non
     else:
         print("todo: implement YouTube Data API call as alternative (rate limited)")
         print(track_name, artist_name)
-        print(search_url)
-        raise Exception('video ID of the form "videoId":"MI_XU1iKRRc" not found in youtube request response')
-
-def download_audio(video_id: str, storage_base: str = None, download_path = None, hash_id = False) -> str:
-    if download_path is None:
-        download_path = ""
-    if storage_base is None:
-        storage_base = ""
-    url = f"https://www.youtube.com/watch?v={video_id}"
-    if hash_id:
-        subdir = os.path.join(storage_base, hash_video_id(video_id))
-    else:
-        subdir = storage_base
-
-    os.makedirs(subdir, exist_ok=True)
-    output_path = os.path.join(subdir, f"{video_id}.mp3")
-    if os.path.exists(output_path):
-        if verbose: print(f"File already exists: {output_path}")
-        return output_path
-
-    print(url)
-    yt = ['./yt-dlp', '--extract-audio', '--audio-format', 'mp3', '--quiet', '--no-warnings', '--progress', '--output', output_path, url]
-    output = subprocess.run(yt, capture_output=False, text=True)
-    #TODO: handle errors
-    #if "Sign in to confirm your age" in output.stderr:
-        #print("Age verification required. Skipping.")
-        #return None
-    #if "Requested format is not available" in output.stderr:
-        #print("Requested format not available. Skipping.")
-        #return None
-
-    return output_path
-
-class YoutubeAudioDownloader:
-    def __init__(self, db_path=playlist_db, storage_base=audio_storage):
-        self.db_path = db_path
-        self.storage_base = storage_base
-        os.makedirs(self.storage_base, exist_ok=True)
-        self.conn = sqlite3.connect(self.db_path)
-        self.cursor = self.conn.cursor()
-        self.commit_counter = 0
-        self.already_processed_counter = 0
-        self.search_blacklist = [
-            "https://www.youtube.com/results?search_query=Aoi+Shiori+-Galileo+Galilei-+%28From+%2522Ao+Hana%2522%29+by+Ralpi+Composer+official+audio"
-
-        ]
-        self._create_tables()
-    
-    def _create_tables(self):
-        self.cursor.execute('''
-        CREATE TABLE IF NOT EXISTS audio_files (
-            track_id TEXT PRIMARY KEY,
-            video_id TEXT,
-            audio_path TEXT,
-            FOREIGN KEY (track_id) REFERENCES tracks(id)
-        );
-        ''')
-        self.commit(force=True)
+        raise YoutubeSearchError(search_query=search_url)
+        #raise Exception('video ID of the form "videoId":"MI_XU1iKRRc" not found in youtube request response')
 
 
-
-
-    def process_track(self, track_id: str, track_name: str = None, artist_name: str = None):
-        if track_name is None or artist_name is None:
-            track_name, artist_name = self.retrieve_track_info(track_id)
-            if track_name is None or artist_name is None:
-                raise Exception(f"Track info not found for track_id {track_id}")
-        existing_audio_path = self.retrieve_track_audio(track_id)
-        if existing_audio_path is not None:
-            if os.path.exists(existing_audio_path):
-                self.already_processed_counter += 1
-                return
-        if self.already_processed_counter > 0:
-            print(f"Already processed {self.already_processed_counter} audio files.")
-            self.already_processed_counter = 0
-        video_id = get_video_id(track_name, artist_name, self.search_blacklist)
-        if video_id is None:
-            if verbose: print(f"Video ID not found for track_id {track_id}")
-            self.cursor.execute('''
-            INSERT OR IGNORE INTO audio_files (track_id, video_id, audio_path)
-            VALUES (?, ?, ?)
-            ''', (track_id, None, None))
-            self.commit()
-            return
-        audio_path = self.download_audio(video_id)
-        self.cursor.execute('''
-        INSERT OR IGNORE INTO audio_files (track_id, video_id, audio_path)
-        VALUES (?, ?, ?)
-        ''', (track_id, video_id, audio_path))
-        self.commit()
-    
-    def retrieve_all_tracks(self) -> list[tuple[str, str, str]]:
-        self.cursor.execute("SELECT id, name, artist FROM tracks")
-        tracks = self.cursor.fetchall()
-        return tracks
-
-    def retrieve_track_info(self, track_id: str) -> tuple[str, str] | tuple[None, None]:
-        self.cursor.execute("SELECT name, artist FROM tracks WHERE id = ?", (track_id,))
-        track_info = self.cursor.fetchone()
-        if track_info:
-            return track_info[0], track_info[1]
-        else:
-            # delete from tracks where artist is null
-            self.cursor.execute("SELECT name from tracks where artist is null and id = ?", (track_id,))
-            track_name = self.cursor.fetchone()
-            if track_name:
-                return track_name[0], None
-            else:
-                return None, None
-
-    def retrieve_track_audio(self, track_id: str) -> str | None:
-        self.cursor.execute("SELECT audio_path FROM audio_files WHERE track_id = ?", (track_id,))
-        audio_path = self.cursor.fetchone()
-        if audio_path:
-            return audio_path[0]
-        else:
-            return None
-
-    def commit(self, force = False):
-        if force:
-            self.conn.commit()
-            self.commit_counter = 0
-        else:
-            self.commit_counter += 1
-            if self.commit_counter >= 10:
-                self.conn.commit()
-                self.commit_counter = 0
-
-    def close(self):
-        self.commit(force=True)
-        self.cursor.close()
-        self.conn.close()
-        if verbose: print("Database connection closed.")
-
-
+def add_missing_video_ids(tracks: list[dict], max_calls: int|None = 5) -> list[dict]:
+    if max_calls is None:
+        max_calls = len(tracks)
+    num_calls = 0
+    new_tracks = []
+    for track in tracks:
+        if track["video_id"] is None and (num_calls < max_calls):
+            num_calls += 1
+            try:
+                video_id = search_yt_for_video_id(track["name"], track["artist"])
+                #video_id = "sq8GBPUb3rk"
+            except requests.exceptions.ConnectionError:
+                video_id = None
+            track["video_id"] = video_id
+        new_tracks.append(track)
+    return new_tracks
 
 
 def playlist_url_to_id(playlist_url: str) -> str:
@@ -251,12 +202,13 @@ def write_track_to_db(track_id: str = None, name: str = None, artist: str = None
         INSERT OR IGNORE INTO albums (id, name)
         VALUES (?, ?)
         ''', (album_id, album))
-    if (track_id is not None) and (video_id is not None) and (audio_path is not None):
+    if (track_id is not None) and (video_id is not None) and (embedding is not None):
+        # note: audio_path will be None if not running locally
+        # this should be UPDATE OR IGNORE when running locally
         cursor.execute('''
         INSERT OR IGNORE INTO audio_files (track_id, video_id, audio_path)
         VALUES (?, ?, ?)
         ''', (track_id, video_id, audio_path))
-    if (video_id is not None) and (embedding is not None):
         write_embedding_to_db(video_id, embedding, cursor)
     if new_conn: 
         cursor.commit()
@@ -275,7 +227,21 @@ def write_embedding_to_db(video_id, embedding, cursor = None):
         cursor.commit()
         conn.close()
 
-def get_playlist_tracks(playlist_id):
+def get_audio_embeddings_count() -> int:
+    conn = sqlite3.connect(playlist_db)
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM audio_embeddings")
+    count = cursor.fetchone()[0]
+    conn.close()
+    return int(count)
+
+def get_playlist_tracks(playlist_id: str, read_only: bool = False, max_lambda_calls: int|None = 3, max_youtube_calls: int|None = 3) -> list[dict]:
+    # todo: implement calling AWS Lambda to compute missing audio embeddings
+    # use a single batch ("video_ids": [id1, id2, ...])
+    # to minimize calls to AWS Lambda
+    num_lambda_calls = 0
+    num_youtube_calls = 0
+
     spp = SpotifyPlaylistProcessor(client_id, client_secret)
     conn = sqlite3.connect(playlist_db)
     cursor = conn.cursor()
@@ -290,49 +256,54 @@ def get_playlist_tracks(playlist_id):
             print(f"invalid playlist_id: {playlist_id}")
         raise e
     tracks_json = playlist_to_json(tracks['items'], playlist_id)
+    if max_lambda_calls is None:
+        max_lambda_calls = len(tracks_json)
+    if max_youtube_calls is None:
+        max_youtube_calls = len(tracks_json)
     for track_id, track in tracks_json.items():
-        video_id = cursor.execute('''
-        select video_id from audio_files where track_id = ?
-                       ''', (track_id,)).fetchone()
+        video_id = lookup_video_id(track_id, cursor)
         if video_id is None:
-            if verbose: print("searching via Youtube...")
-            video_id = get_video_id(track['name'], track['artist'])
-            if verbose: print("downloading audio via yt-dlp...")
-            audio_path = download_audio(video_id, audio_tmp_storage)
-            embedding = compute_audio_embedding(video_id, audio_path)
-            write_track_to_db(track_id=track_id,
-                               name=track['name'],
-                               artist=track['artist'],
-                               album=track['album'],
-                               album_id=track['album_id'],
-                               popularity=track['popularity'],
-                               video_id=video_id,
-                               audio_path=audio_path,
-                               embedding=embedding,
-                               cursor=cursor)
-            cursor.commit()
+            if (num_youtube_calls < max_youtube_calls):
+                num_youtube_calls += 1
+                try:
+                    video_id = search_yt_for_video_id(track['name'], track['artist'])
+                except requests.exceptions.ConnectionError:
+                    video_id = None
+                #audio_path = download_audio(video_id, audio_tmp_storage)
+                if num_lambda_calls < max_lambda_calls:
+                    num_lambda_calls += 1
+                    embedding = compute_audio_embedding(video_id)
+                else:
+                    embedding = None
+                if not read_only:
+                    write_track_to_db(track_id=track_id,
+                                    name=track['name'],
+                                    artist=track['artist'],
+                                    album=track['album'],
+                                    album_id=track['album_id'],
+                                    popularity=track['popularity'],
+                                    video_id=video_id,
+                                    audio_path=None,
+                                    embedding=embedding,
+                                    cursor=cursor)
         else:
-            video_id = video_id[0]
-            embedding = cursor.execute('''
-            select * from audio_embeddings where video_id = ?
-                                    ''', (video_id,)).fetchone()
-            if embedding is None:
-                print("downloading audio via yt-dlp...")
-                audio_path = download_audio(video_id, audio_tmp_storage)
-                embedding = compute_audio_embedding(video_id, audio_path)
-                write_track_to_db(track_id=track_id,
-                                  name=None,
-                                  artist=None,
-                                  album=None,
-                                  album_id=None,
-                                  popularity=None,
-                                  video_id=video_id,
-                                  audio_path=audio_path,
-                                  embedding=embedding,
-                                  cursor=cursor)
-                cursor.commit()
-            else:
-                embedding = embedding[1:]
+            embedding = lookup_audio_embedding(video_id, cursor)
+            if embedding is None and (num_lambda_calls < max_lambda_calls):
+                #print("downloading audio via yt-dlp...")
+                #audio_path = download_audio(video_id, audio_tmp_storage)
+                num_lambda_calls += 1
+                embedding = compute_audio_embedding(video_id)
+                if not read_only:
+                    write_track_to_db(track_id=track_id,
+                                    name=None,
+                                    artist=None,
+                                    album=None,
+                                    album_id=None,
+                                    popularity=None,
+                                    video_id=video_id,
+                                    audio_path=None,
+                                    embedding=embedding,
+                                    cursor=cursor)
 
         tracks_json[track_id]['video_id'] = video_id
         tracks_json[track_id]['embedding'] = embedding
@@ -349,6 +320,8 @@ def get_playlist_tracks(playlist_id):
             "embedding": track['embedding']
         } for track_id, track in tracks_json.items()
     ]
+    conn.commit()
+    conn.close()
     spp.close()
     return playlist_tracks
 
