@@ -5,7 +5,6 @@ from spotipy.oauth2 import SpotifyClientCredentials
 import sqlite3
 import requests
 
-from dotenv import dotenv_values
 import os
 import argparse
 from tqdm import tqdm
@@ -31,8 +30,8 @@ keyboard_interrupt = False
 
 #signal.signal(signal.SIGINT, signal_handler)
 
-#env = dotenv_values(".env")
 # if running locally
+#from dotenv import dotenv_values
 #env = dotenv_values(".env")
 env = os.environ
 verbose = env["VERBOSE"] == "True"
@@ -193,7 +192,7 @@ def playlist_to_json(tracks, playlist_id) -> dict:
 def write_track_to_db(track_id: str = None, name: str = None, artist: str = None, album: str = None, album_id: str = None, popularity: float = None, video_id: str = None, audio_path: str = None, embedding: list[float] = None, cursor = None):
     new_conn = False
     if cursor is None:
-        conn = sqlite3.connect(dotenv_values(".env")["PLAYLIST_DB"])
+        conn = sqlite3.connect(playlist_db)
         cursor = conn.cursor()
         new_conn = True
     if (track_id is not None) and (name is not None) and (artist is not None) and (album is not None) and (album_id is not None) and (popularity is not None):
@@ -220,7 +219,7 @@ def write_track_to_db(track_id: str = None, name: str = None, artist: str = None
 def write_embedding_to_db(video_id, embedding, cursor = None):
     new_conn = False
     if cursor is None:
-        conn = sqlite3.connect(dotenv_values(".env")["PLAYLIST_DB"])
+        conn = sqlite3.connect(playlist_db)
         cursor = conn.cursor()
         new_conn = True
     placeholders = ", ".join(["?"] * 51)
@@ -248,7 +247,7 @@ def get_playlist_tracks(playlist_id: str, read_only: bool = False, max_lambda_ca
     spp = SpotifyPlaylistProcessor(client_id, client_secret)
     conn = sqlite3.connect(playlist_db)
     cursor = conn.cursor()
-    audio_tmp_storage = dotenv_values(".env")["AUDIO_TMP_STORAGE"]
+    audio_tmp_storage = env["AUDIO_TMP_STORAGE"]
     os.makedirs(audio_tmp_storage, exist_ok=True)
 
     try:

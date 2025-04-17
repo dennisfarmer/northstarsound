@@ -1,7 +1,6 @@
 from track_data import SpotifyPlaylistProcessor, get_playlist_tracks, playlist_url_to_id, get_audio_embeddings_count, search_yt_for_video_id
 from recommender import get_music_recommendations, NoValidTracksError, EmptyPlaylistError
 import sqlite3
-from dotenv import dotenv_values
 import spotipy
 import os
 import argparse
@@ -16,6 +15,7 @@ import pickle
 
 
 # if running locally
+#from dotenv import dotenv_values
 #env = dotenv_values(".env")
 env = os.environ
 verbose = env["VERBOSE"] == "True"
