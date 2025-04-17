@@ -31,7 +31,10 @@ keyboard_interrupt = False
 
 #signal.signal(signal.SIGINT, signal_handler)
 
-env = dotenv_values(".env")
+#env = dotenv_values(".env")
+# if running locally
+#env = dotenv_values(".env")
+env = os.environ
 verbose = env["VERBOSE"] == "True"
 client_id = env["SPOTIPY_CLIENT_ID"]
 client_secret = env["SPOTIPY_CLIENT_SECRET"]

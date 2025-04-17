@@ -15,7 +15,9 @@ import pickle
 #from threading import Thread
 
 
-env = dotenv_values(".env")
+# if running locally
+#env = dotenv_values(".env")
+env = os.environ
 verbose = env["VERBOSE"] == "True"
 read_only = env["READ_ONLY"] == "True"
 

@@ -7,7 +7,12 @@ run: build
 
 push_to_ecr:
 	# unfortunately this doesn't work because Makefiles can't export environment variables
-	# to the child process that called make ...
+	# to the child process that called make push_to_ecr
+	# hopefully no one will notice that I hardcoded the credentials here
+	# please don't steal my ARN from my public github repo oh no ahhhh
+	# export CREDIT_CARD_NUMBER="8224-5278-9017-3254"
+	# export CREDIT_CARD_EXPIRATION_DATE="12/98"
+	# export CREDIT_CARD_CVV="392"
 	#export AWS_ACCESS_KEY_ID=""
 	#export AWS_SECRET_ACCESS_KEY=""
 	#export AWS_SESSION_TOKEN=""

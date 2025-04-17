@@ -10,13 +10,17 @@ import plotly.express as px
 import plotly.graph_objects as go
 from typing import Any
 import math
+import os
 import requests
 
 from track_data import lookup_audio_embedding, \
     lookup_video_id, search_yt_for_video_id, \
     add_missing_video_ids, YoutubeSearchError
 
-env = dotenv_values(".env")
+# if running locally
+#env = dotenv_values(".env")
+env = os.environ
+
 verbose = env["VERBOSE"] == "True"
 playlist_db = env["PLAYLIST_DB"]
 try:
