@@ -20,6 +20,7 @@ output.txt
 
 embedding_api/ffmpeg
 data/playlists/playlists_backup_2025_04_10.db
+src/__pycache__/
 
 *.pyc
 *.pyo

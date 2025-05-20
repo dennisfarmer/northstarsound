@@ -1,4 +1,4 @@
-from track_data import SpotifyPlaylistProcessor, get_playlist_tracks, playlist_url_to_id, get_audio_embeddings_count, search_yt_for_video_id
+from add_music import SpotifyPlaylistProcessor, get_playlist_tracks, playlist_url_to_id, get_audio_embeddings_count, search_yt_for_video_id
 from recommender import get_music_recommendations, NoValidTracksError, EmptyPlaylistError
 import sqlite3
 import spotipy
@@ -11,13 +11,19 @@ import streamlit as st
 import numpy as np
 import requests
 import pickle
+import platform
+from dotenv import dotenv_values
+from src import Playlist
 #from threading import Thread
 
 
-# if running locally
-#from dotenv import dotenv_values
-#env = dotenv_values(".env")
-env = os.environ
+if platform.system() == "Darwin":
+    env = dotenv_values(".env")
+elif platform.system() == "Linux":
+    env = os.environ
+else:
+    raise Exception("Unsupported operating system. Cannot load environment variables.")
+
 verbose = env["VERBOSE"] == "True"
 read_only = env["READ_ONLY"] == "True"
 
@@ -99,7 +105,7 @@ def main():
         if playlist_url is None:
             playlist_url = "https://open.spotify.com/playlist/1bPcEafe3YHOssXSK8wZs8"
         try:
-            playlist_id = playlist_url_to_id(playlist_url)
+            playlist_id = Playlist.url_to_id(playlist_url)
         except ValueError:
             st.error("Please enter a valid Spotify playlist URL.")
             return

@@ -27,43 +27,48 @@ def compute_audio_embedding(audio_path):
         return None
     return mean_emb[0]
 
-def download_audio(video_id: str, subdir: str, cookies_path: str) -> str:
-    url = f"https://www.youtube.com/watch?v={video_id}"
 
-    yt_dlp = os.path.join(os.path.dirname(__file__), 'yt-dlp_linux')
-    ffmpeg = os.path.join(os.path.dirname(__file__), 'ffmpeg')
+def download_audio(video_id: str, ngrok_path) -> str:
+    # todo: send request to app hosted on flask_ngrok
+    pass
 
-    os.makedirs(subdir, exist_ok=True)
-    webm_path = os.path.join(subdir, f"{video_id}.webm")
-    mp4_path = os.path.join(subdir, f"{video_id}.mp4")
-    mp3_path = os.path.join(subdir, f"{video_id}.mp3")
-    print(url)
-    #yt = [yt_dlp, '--extract-audio', '--audio-format', 'mp3', '--quiet', 
-          #'--no-warnings', '--progress', '--ffmpeg-location', ffmpeg, '--output', audio_path, url]
-    yt = [yt_dlp, '--extract-audio', '--audio-format', 'mp3',
-          '--progress', '--ffmpeg-location', ffmpeg, 
-          '--cookies-from-browser', 'chrome', '--cookies', cookies_path, 
-          '--output', webm_path, url]
+#def download_audio(video_id: str, subdir: str, cookies_path: str) -> str:
+    #url = f"https://www.youtube.com/watch?v={video_id}"
 
-    # fails at conversion step; something about expecting string/bytes but getting None (??)
-    yt_output = subprocess.run(yt, capture_output=True, text=True)
-    logger.info(yt_output)
-    print("yt_output:")
-    print(yt_output)
+    #yt_dlp = os.path.join(os.path.dirname(__file__), 'yt-dlp_linux')
+    #ffmpeg = os.path.join(os.path.dirname(__file__), 'ffmpeg')
 
-    # workaround: manually convert to mp3
-    ff_output = subprocess.run([ffmpeg, "-i", webm_path, "-vn", "-ab", "128k", "-ar", "44100", "-y", mp3_path], capture_output=True, text=True)
-    logger.info(ff_output)
-    print("ff_output:")
-    print(ff_output)
+    #os.makedirs(subdir, exist_ok=True)
+    #webm_path = os.path.join(subdir, f"{video_id}.webm")
+    #mp4_path = os.path.join(subdir, f"{video_id}.mp4")
+    #mp3_path = os.path.join(subdir, f"{video_id}.mp3")
+    #print(url)
+    ##yt = [yt_dlp, '--extract-audio', '--audio-format', 'mp3', '--quiet', 
+          ##'--no-warnings', '--progress', '--ffmpeg-location', ffmpeg, '--output', audio_path, url]
+    #yt = [yt_dlp, '--extract-audio', '--audio-format', 'mp3',
+          #'--progress', '--ffmpeg-location', ffmpeg, 
+          #'--cookies-from-browser', 'chrome', '--cookies', cookies_path, 
+          #'--output', webm_path, url]
 
-    if not os.path.exists(mp3_path):
-        raise FileNotFoundError(f"The audio file wasn't actually downloaded/converted from Youtube properly (Youtube might think you're a bot / need to verify age / etc., or you might be using an incompatable ffmpeg binary - see Makefile for download source) -- {yt_output}, {ff_output}")
+    ## fails at conversion step; something about expecting string/bytes but getting None (??)
+    #yt_output = subprocess.run(yt, capture_output=True, text=True)
+    #logger.info(yt_output)
+    #print("yt_output:")
+    #print(yt_output)
 
-    for f in [mp4_path, webm_path]:
-        if os.path.exists(f):
-            os.remove(f)
-    return mp3_path
+    ## workaround: manually convert to mp3
+    #ff_output = subprocess.run([ffmpeg, "-i", webm_path, "-vn", "-ab", "128k", "-ar", "44100", "-y", mp3_path], capture_output=True, text=True)
+    #logger.info(ff_output)
+    #print("ff_output:")
+    #print(ff_output)
+
+    #if not os.path.exists(mp3_path):
+        #raise FileNotFoundError(f"The audio file wasn't actually downloaded/converted from Youtube properly (Youtube might think you're a bot / need to verify age / etc., or you might be using an incompatable ffmpeg binary - see Makefile for download source) -- {yt_output}, {ff_output}")
+
+    #for f in [mp4_path, webm_path]:
+        #if os.path.exists(f):
+            #os.remove(f)
+    #return mp3_path
     
 
 def lambda_handler_test(video_id):
